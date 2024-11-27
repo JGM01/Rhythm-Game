@@ -5,26 +5,27 @@ class SongLoader {
 
   async loadAllSongs() {
     try {
-      // First, fetch the songlist.json
-      const response = await fetch('/songlist.json');
-      if (!response.ok) throw new Error('Failed to load song list');
-      const songList = await response.json();
+      // Fetch the list of directories in the songs folder
+      const response = await fetch('/songs/');
+      if (!response.ok) throw new Error('Failed to scan songs directory');
+      const songDirs = await response.json();  // The server will return a list of directories
 
-      // Load each song's .purin file
-      const loadPromises = songList.songs.map(async (songInfo) => {
-        const songResponse = await fetch(`/${songInfo.path}`);
-        if (!songResponse.ok) throw new Error(`Failed to load song: ${songInfo.id}`);
-        const songData = await songResponse.json();
+      // For each song directory, load its .purin file
+      const loadPromises = songDirs.map(async (songId) => {
+        // Load and parse the .purin file
+        const purinResponse = await fetch(`/songs/${songId}/${songId}.purin`);
+        if (!purinResponse.ok) throw new Error(`Failed to load song: ${songId}`);
+        const songData = await purinResponse.json();
 
-        // Create and load the audio
-        const audio = new Audio(`/songs/${songInfo.id}/song.mp3`);
+        // Load the audio
+        const audio = new Audio(`/songs/${songId}/song.mp3`);
         await new Promise((resolve, reject) => {
           audio.addEventListener('canplaythrough', resolve);
           audio.addEventListener('error', reject);
           audio.load();
         });
 
-        // Convert arrow timings to milliseconds based on BPM
+        // Process the timing data
         const msPerBeat = (60000 / songData.bpm);
         const convertedArrows = songData.arrows.map(arrow => ({
           lane: CONFIG.KEYS.indexOf(arrow.key),
@@ -33,7 +34,7 @@ class SongLoader {
 
         // Create the processed song data
         const processedSong = {
-          id: songInfo.id,
+          id: songId,
           title: songData.title,
           artist: songData.artist,
           bpm: songData.bpm,
@@ -42,7 +43,7 @@ class SongLoader {
           difficulty: songData.difficulty
         };
 
-        this.songs.set(songInfo.id, processedSong);
+        this.songs.set(songId, processedSong);
         return processedSong;
       });
 

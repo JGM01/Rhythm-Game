@@ -57,6 +57,8 @@ class RhythmGame {
 
   bindKeyHandlers() {
     document.addEventListener('keydown', (e) => {
+      console.log('Key pressed:', e.key);
+
       if (this.gameState === 'menu') {
         this.menuSystem.handleInput(e.key);
         return;
@@ -79,7 +81,8 @@ class RhythmGame {
     });
   }
 
-  async startSong(songData) {
+  startSong(songData) {
+    console.log('Starting song:', songData.title);
     this.currentSong = songData;
     this.gameState = 'playing';
     this.score = 0;
@@ -88,12 +91,9 @@ class RhythmGame {
     this.arrows = [];
     this.nextArrowIndex = 0;
 
-    // Preload a few seconds of arrows
-    this.updateArrowSpawning(0);
-
-    // Start the song with a slight delay to allow for arrow preload
     setTimeout(() => {
       this.songStartTime = performance.now();
+      console.log('Song started at:', this.songStartTime);
       this.currentSong.audio.currentTime = 0;
       this.currentSong.audio.play();
     }, 3000);
@@ -101,14 +101,20 @@ class RhythmGame {
 
   updateArrowSpawning(currentTime) {
     const songTime = currentTime - this.songStartTime;
-    const spawnAheadTime = 2000; // Spawn arrows 2 seconds ahead
+    console.log('Song time:', songTime, 'Next arrow index:', this.nextArrowIndex);
 
     while (
       this.nextArrowIndex < this.currentSong.arrows.length &&
-      this.currentSong.arrows[this.nextArrowIndex].time <= songTime + spawnAheadTime
+      this.currentSong.arrows[this.nextArrowIndex].time <= songTime + CONFIG.TIMING.SPAWN_AHEAD
     ) {
       const arrowData = this.currentSong.arrows[this.nextArrowIndex];
-      this.arrows.push(new Arrow(arrowData.lane, arrowData.time + this.songStartTime));
+      const targetTime = arrowData.time + this.songStartTime;
+      console.log('Spawning arrow:', {
+        lane: arrowData.lane,
+        targetTime: targetTime,
+        currentTime: currentTime
+      });
+      this.arrows.push(new Arrow(arrowData.lane, targetTime));
       this.nextArrowIndex++;
     }
   }
@@ -122,18 +128,30 @@ class RhythmGame {
 
     this.arrows.forEach(arrow => {
       if (arrow.lane === laneIndex && !arrow.hit && !arrow.missed) {
-        const distance = Math.abs(currentTime - arrow.targetTime);
-        if (distance < closestDistance) {
-          closestDistance = distance;
+        // Calculate the arrow's current Y position
+        const arrowY = arrow.calculateY(currentTime);
+
+        // Calculate distance from target line
+        const distanceFromTarget = Math.abs(arrowY - CONFIG.GAMEPLAY.TARGET_Y);
+
+        // Convert pixel distance to time (based on fall speed)
+        const timeDistance = (distanceFromTarget / CONFIG.GAMEPLAY.TARGET_Y) * CONFIG.TIMING.SPAWN_AHEAD;
+
+        if (timeDistance < CONFIG.TIMING.GOOD_WINDOW && timeDistance < closestDistance) {
+          closestDistance = timeDistance;
           closestArrow = arrow;
         }
       }
     });
 
     if (closestArrow) {
-      if (closestDistance <= CONFIG.TIMING.PERFECT_WINDOW) {
+      const arrowY = closestArrow.calculateY(currentTime);
+      const distanceFromTarget = Math.abs(arrowY - CONFIG.GAMEPLAY.TARGET_Y);
+      const timeDistance = (distanceFromTarget / CONFIG.GAMEPLAY.TARGET_Y) * CONFIG.TIMING.SPAWN_AHEAD;
+
+      if (timeDistance <= CONFIG.TIMING.PERFECT_WINDOW) {
         this.registerHit('perfect', closestArrow);
-      } else if (closestDistance <= CONFIG.TIMING.GOOD_WINDOW) {
+      } else if (timeDistance <= CONFIG.TIMING.GOOD_WINDOW) {
         this.registerHit('good', closestArrow);
       }
     }
@@ -191,31 +209,30 @@ class RhythmGame {
   }
 
   update(currentTime) {
-    if (this.gameState === 'playing') {
-      // Update arrow spawning based on song time
-      if (this.currentSong) {
-        this.updateArrowSpawning(currentTime);
-      }
+    if (this.gameState === 'playing' && this.currentSong) {
+      // Spawn new arrows
+      this.updateArrowSpawning(currentTime);
 
       // Update and clean up arrows
       this.arrows = this.arrows.filter(arrow => {
-        // Update arrow position
         arrow.update(currentTime);
 
         // Check for misses
+        const arrowY = arrow.calculateY(currentTime);
         if (!arrow.hit && !arrow.missed &&
-          currentTime > arrow.targetTime + CONFIG.TIMING.GOOD_WINDOW) {
+          arrowY > CONFIG.GAMEPLAY.TARGET_Y + CONFIG.TIMING.GOOD_WINDOW) {
           this.registerMiss(arrow);
         }
 
-        // Keep arrows that are either still on screen or recently hit
-        return currentTime - arrow.targetTime < 1000;
+        // Keep arrows that haven't gone too far past the target
+        return arrowY < CONFIG.CANVAS.HEIGHT + CONFIG.ARROWS.SIZE;
       });
 
       // Check if song is finished
-      if (this.currentSong &&
-        this.nextArrowIndex >= this.currentSong.arrows.length &&
-        this.arrows.length === 0) {
+      if (this.nextArrowIndex >= this.currentSong.arrows.length &&
+        this.arrows.length === 0 &&
+        currentTime - this.songStartTime > this.currentSong.audio.duration * 1000) {
+        console.log('Song finished');
         this.gameState = 'menu';
         this.currentSong.audio.pause();
         this.currentSong = null;
