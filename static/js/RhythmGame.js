@@ -18,7 +18,13 @@ class RhythmGame {
     this.menuSystem = new MenuSystem(this);
 
     // Game state
-    this.gameState = 'menu'; // 'menu', 'playing'
+    this.gameState = 'menu';
+
+    this.pauseMenu = {
+      selectedOption: 0,
+      options: CONFIG.MENUS.PAUSE.OPTIONS
+    };
+
     this.currentSong = null;
     this.songStartTime = 0;
     this.lastFrameTime = 0;
@@ -58,6 +64,35 @@ class RhythmGame {
   bindKeyHandlers() {
     document.addEventListener('keydown', (e) => {
       console.log('Key pressed:', e.key);
+
+      if (e.key === 'Escape') {
+        if (this.gameState === 'playing') {
+          this.pauseGame();
+        } else if (this.gameState === 'paused') {
+          this.resumeGame();
+        }
+        return;
+      }
+
+      // Handle pause menu navigation
+      if (this.gameState === 'paused') {
+        this.handlePauseMenuInput(e.key);
+        return;
+      }
+
+      if (this.gameState === 'menu') {
+        this.menuSystem.handleInput(e.key);
+        return;
+      }
+
+      // Normal gameplay input
+      if (this.keys.hasOwnProperty(e.key)) {
+        if (!this.keys[e.key]) {
+          this.keys[e.key] = true;
+          document.getElementById(`key-${e.key}`).classList.add('active');
+          this.handleKeyPress(e.key);
+        }
+      }
 
       if (this.gameState === 'menu') {
         this.menuSystem.handleInput(e.key);
@@ -192,18 +227,27 @@ class RhythmGame {
     this.deltaTime = (currentTime - this.lastFrameTime) / 1000;
     this.lastFrameTime = currentTime;
 
+    // Clear the canvas
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
     if (this.gameState === 'menu') {
       this.menuSystem.draw(this.ctx);
-    } else {
+    } else if (this.gameState === 'playing') {
       this.update(currentTime);
       this.draw();
+    } else if (this.gameState === 'paused') {
+      // Draw the game state underneath
+      this.draw();
+      // Draw the pause menu overlay
+      this.drawPauseMenu();
     }
 
     this.debugInfo.textContent = `
-            FPS: ${Math.round(1 / this.deltaTime)}
-            Active Arrows: ${this.arrows.filter(a => !a.hit && !a.missed).length}
-            ${this.currentSong ? `Song Time: ${((currentTime - this.songStartTime) / 1000).toFixed(2)}s` : ''}
-        `;
+          FPS: ${Math.round(1 / this.deltaTime)}
+          State: ${this.gameState}
+          Active Arrows: ${this.arrows.filter(a => !a.hit && !a.missed).length}
+          ${this.currentSong ? `Song Time: ${((currentTime - this.songStartTime) / 1000).toFixed(2)}s` : ''}
+      `;
 
     requestAnimationFrame(this.gameLoop.bind(this));
   }
@@ -286,6 +330,86 @@ class RhythmGame {
 
     // Draw arrows
     this.arrows.forEach(arrow => arrow.draw(this.ctx, this.assetLoader));
+  }
+
+
+  pauseGame() {
+    if (this.gameState === 'playing') {
+      this.gameState = 'paused';
+      this.currentSong.audio.pause();
+      this.pauseTime = performance.now();
+    }
+  }
+
+  resumeGame() {
+    if (this.gameState === 'paused') {
+      const pauseDuration = performance.now() - this.pauseTime;
+      // Adjust all timing-related values by pause duration
+      this.songStartTime += pauseDuration;
+      this.arrows.forEach(arrow => {
+        arrow.targetTime += pauseDuration;
+      });
+
+      this.gameState = 'playing';
+      this.currentSong.audio.play();
+    }
+  }
+
+  handlePauseMenuInput(key) {
+    switch (key) {
+      case 'ArrowUp':
+        this.pauseMenu.selectedOption = (this.pauseMenu.selectedOption - 1 + this.pauseMenu.options.length) % this.pauseMenu.options.length;
+        break;
+      case 'ArrowDown':
+        this.pauseMenu.selectedOption = (this.pauseMenu.selectedOption + 1) % this.pauseMenu.options.length;
+        break;
+      case 'Enter':
+        this.executePauseMenuOption();
+        break;
+    }
+  }
+
+  executePauseMenuOption() {
+    switch (this.pauseMenu.options[this.pauseMenu.selectedOption]) {
+      case 'Resume':
+        this.resumeGame();
+        break;
+      case 'Restart':
+        this.currentSong.audio.pause();
+        this.currentSong.audio.currentTime = 0;
+        this.startSong(this.currentSong);
+        break;
+      case 'Exit to Menu':
+        this.currentSong.audio.pause();
+        this.gameState = 'menu';
+        this.currentSong = null;
+        break;
+    }
+  }
+
+  drawPauseMenu() {
+    // Darken the background
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Draw pause menu
+    this.ctx.font = '48px Arial';
+    this.ctx.textAlign = 'center';
+    this.ctx.fillStyle = '#fff';
+    this.ctx.fillText('PAUSED', this.canvas.width / 2, 200);
+
+    // Draw options
+    this.ctx.font = '32px Arial';
+    this.pauseMenu.options.forEach((option, index) => {
+      this.ctx.fillStyle = index === this.pauseMenu.selectedOption ?
+        CONFIG.MENUS.PAUSE.SELECTED_COLOR :
+        CONFIG.MENUS.PAUSE.UNSELECTED_COLOR;
+      this.ctx.fillText(
+        option,
+        this.canvas.width / 2,
+        300 + (index * 50)
+      );
+    });
   }
 
 }

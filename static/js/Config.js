@@ -24,5 +24,12 @@ const CONFIG = {
   GAMEPLAY: {
     TARGET_Y: 650
   },
+  MENUS: {
+    PAUSE: {
+      OPTIONS: ['Resume', 'Restart', 'Exit to Menu'],
+      SELECTED_COLOR: '#ff0',
+      UNSELECTED_COLOR: '#fff'
+    }
+  },
   KEYS: ['h', 'j', 'k', 'l']
 };
