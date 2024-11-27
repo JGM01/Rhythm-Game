@@ -1,0 +1,25 @@
+{
+    "title": "bruh",
+    "artist": "jacob",
+    "audioPath": "songs/bruh/song.mp3",
+    "bpm": 100,
+    "difficulty": 1,
+    "offset": 0,
+    "arrows": [
+        {"beat": 4, "key": "j"},
+        {"beat": 6, "key": "k"},
+        {"beat": 8, "key": "j"},
+        {"beat": 10, "key": "k"},
+        {"beat": 12, "key": "l"},
+        {"beat": 14, "key": "h"},
+        {"beat": 16, "key": "j"},
+        {"beat": 18, "key": "k"},
+        {"beat": 20, "key": "l"},
+        {"beat": 22, "key": "k"},
+        {"beat": 24, "key": "j"},
+        {"beat": 26, "key": "h"},
+        {"beat": 28, "key": "j"},
+        {"beat": 30, "key": "k"},
+        {"beat": 32, "key": "l"}
+    ]
+}
