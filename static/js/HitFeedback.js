@@ -5,6 +5,7 @@ class HitFeedback {
         this.timeout = null;
     }
 
+
     show(type) {
         clearTimeout(this.timeout);
 

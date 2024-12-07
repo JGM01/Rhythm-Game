@@ -1,9 +1,11 @@
 class Arrow {
-  constructor(lane, targetTime) {
+  constructor(lane, targetTime, groupId) {
     this.lane = lane;
     this.targetTime = targetTime;
+    this.groupId = groupId;  // New property to track arrow groups
     this.hit = false;
     this.missed = false;
+    this.y = 0;  // Will be calculated during update
   }
 
   update(currentTime) {
@@ -26,9 +28,19 @@ class Arrow {
     const image = assetLoader.getArrowImage(this.lane);
 
     ctx.save();
+
+    // Fade out missed arrows
     if (this.missed) {
       ctx.globalAlpha = 0.5;
     }
+
+    // Draw arrows that are part of a group with a subtle highlight
+    if (this.groupId !== undefined) {
+      // Optional: Add visual indication for grouped arrows
+      ctx.shadowColor = '#fff';
+      ctx.shadowBlur = 10;
+    }
+
     ctx.drawImage(
       image,
       x + (CONFIG.LANES.WIDTH - CONFIG.ARROWS.SIZE) / 2,
@@ -36,6 +48,7 @@ class Arrow {
       CONFIG.ARROWS.SIZE,
       CONFIG.ARROWS.SIZE
     );
+
     ctx.restore();
   }
 }

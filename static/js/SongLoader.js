@@ -8,7 +8,7 @@ class SongLoader {
       // Fetch the list of directories in the songs folder
       const response = await fetch('/songs/');
       if (!response.ok) throw new Error('Failed to scan songs directory');
-      const songDirs = await response.json();  // The server will return a list of directories
+      const songDirs = await response.json();
 
       // For each song directory, load its .purin file
       const loadPromises = songDirs.map(async (songId) => {
@@ -27,10 +27,24 @@ class SongLoader {
 
         // Process the timing data
         const msPerBeat = (60000 / songData.bpm);
-        const convertedArrows = songData.arrows.map(arrow => ({
-          lane: CONFIG.KEYS.indexOf(arrow.key),
-          time: arrow.beat * msPerBeat
-        }));
+        const convertedArrows = [];
+
+        // Process each arrow data, now handling multiple keys
+        songData.arrows.forEach(arrow => {
+          // Split the key string into individual keys if it's a multi-key beat
+          const keys = arrow.key.split('');
+
+          // Create an arrow for each key, but maintain their relationship
+          keys.forEach(key => {
+            if (CONFIG.KEYS.includes(key)) {
+              convertedArrows.push({
+                lane: CONFIG.KEYS.indexOf(key),
+                time: arrow.beat * msPerBeat,
+                groupId: arrow.beat  // Use beat as group identifier
+              });
+            }
+          });
+        });
 
         // Create the processed song data
         const processedSong = {

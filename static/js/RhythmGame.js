@@ -136,69 +136,87 @@ class RhythmGame {
 
   updateArrowSpawning(currentTime) {
     const songTime = currentTime - this.songStartTime;
-    console.log('Song time:', songTime, 'Next arrow index:', this.nextArrowIndex);
 
     while (
       this.nextArrowIndex < this.currentSong.arrows.length &&
       this.currentSong.arrows[this.nextArrowIndex].time <= songTime + CONFIG.TIMING.SPAWN_AHEAD
     ) {
-      const arrowData = this.currentSong.arrows[this.nextArrowIndex];
-      const targetTime = arrowData.time + this.songStartTime;
-      console.log('Spawning arrow:', {
-        lane: arrowData.lane,
-        targetTime: targetTime,
-        currentTime: currentTime
+      // Get all arrows that should spawn in this frame
+      const nextArrows = this.currentSong.arrows.filter((arrow, index) => {
+        return index >= this.nextArrowIndex &&
+          arrow.time <= songTime + CONFIG.TIMING.SPAWN_AHEAD &&
+          arrow.time > songTime + CONFIG.TIMING.SPAWN_AHEAD - 16; // Group within same frame
       });
-      this.arrows.push(new Arrow(arrowData.lane, targetTime));
-      this.nextArrowIndex++;
+
+      if (nextArrows.length === 0) break;
+
+      nextArrows.forEach(arrowData => {
+        const targetTime = arrowData.time + this.songStartTime;
+        this.arrows.push(new Arrow(arrowData.lane, targetTime, arrowData.groupId));
+      });
+
+      this.nextArrowIndex += nextArrows.length;
     }
   }
 
   handleKeyPress(key) {
     const laneIndex = CONFIG.KEYS.indexOf(key);
-    let closestArrow = null;
-    let closestDistance = Infinity;
-
     const currentTime = performance.now();
 
-    this.arrows.forEach(arrow => {
+    // Find all arrows in this lane that could be hit
+    const hitableArrows = this.arrows.filter(arrow => {
       if (arrow.lane === laneIndex && !arrow.hit && !arrow.missed) {
-        // Calculate the arrow's current Y position
         const arrowY = arrow.calculateY(currentTime);
-
-        // Calculate distance from target line
         const distanceFromTarget = Math.abs(arrowY - CONFIG.GAMEPLAY.TARGET_Y);
-
-        // Convert pixel distance to time (based on fall speed)
         const timeDistance = (distanceFromTarget / CONFIG.GAMEPLAY.TARGET_Y) * CONFIG.TIMING.SPAWN_AHEAD;
-
-        if (timeDistance < CONFIG.TIMING.GOOD_WINDOW && timeDistance < closestDistance) {
-          closestDistance = timeDistance;
-          closestArrow = arrow;
-        }
+        return timeDistance <= CONFIG.TIMING.GOOD_WINDOW;
       }
+      return false;
     });
 
-    if (closestArrow) {
+    if (hitableArrows.length > 0) {
+      // Find the closest arrow to the target line
+      const closestArrow = hitableArrows.reduce((closest, current) => {
+        const currentY = current.calculateY(currentTime);
+        const currentDistance = Math.abs(currentY - CONFIG.GAMEPLAY.TARGET_Y);
+        const closestY = closest.calculateY(currentTime);
+        const closestDistance = Math.abs(closestY - CONFIG.GAMEPLAY.TARGET_Y);
+        return currentDistance < closestDistance ? current : closest;
+      }, hitableArrows[0]);
+
       const arrowY = closestArrow.calculateY(currentTime);
       const distanceFromTarget = Math.abs(arrowY - CONFIG.GAMEPLAY.TARGET_Y);
       const timeDistance = (distanceFromTarget / CONFIG.GAMEPLAY.TARGET_Y) * CONFIG.TIMING.SPAWN_AHEAD;
 
+      // Check if other arrows in the same group are ready to be hit
+      const groupArrows = this.arrows.filter(arrow =>
+        arrow.groupId === closestArrow.groupId &&
+        !arrow.hit &&
+        !arrow.missed
+      );
+
       if (timeDistance <= CONFIG.TIMING.PERFECT_WINDOW) {
-        this.registerHit('perfect', closestArrow);
+        this.registerHit('perfect', closestArrow, groupArrows);
       } else if (timeDistance <= CONFIG.TIMING.GOOD_WINDOW) {
-        this.registerHit('good', closestArrow);
+        this.registerHit('good', closestArrow, groupArrows);
       }
     }
   }
 
-  registerHit(type, arrow) {
-    arrow.hit = true;
+  registerHit(type, arrow, groupArrows) {
+    // Mark all arrows in the group as hit
+    groupArrows.forEach(groupArrow => {
+      groupArrow.hit = true;
+    });
+
     this.hitFeedback.show(type);
 
     const baseScore = type === 'perfect' ?
       CONFIG.SCORING.PERFECT : CONFIG.SCORING.GOOD;
-    this.score += baseScore * (1 + this.combo * CONFIG.SCORING.COMBO_MULTIPLIER);
+
+    // Award score based on how many arrows were in the group
+    this.score += baseScore * groupArrows.length *
+      (1 + this.combo * CONFIG.SCORING.COMBO_MULTIPLIER);
 
     this.stats[type]++;
     this.combo++;
@@ -207,7 +225,18 @@ class RhythmGame {
 
   registerMiss(arrow) {
     if (!arrow.hit && !arrow.missed) {
-      arrow.missed = true;
+      // Find all arrows in the same group
+      const groupArrows = this.arrows.filter(a =>
+        a.groupId === arrow.groupId &&
+        !a.hit &&
+        !a.missed
+      );
+
+      // Mark all group arrows as missed
+      groupArrows.forEach(groupArrow => {
+        groupArrow.missed = true;
+      });
+
       this.stats.miss++;
       this.combo = 0;
       this.hitFeedback.show('miss');

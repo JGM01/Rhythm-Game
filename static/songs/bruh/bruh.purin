@@ -6,9 +6,9 @@
     "difficulty": 1,
     "offset": 0,
     "arrows": [
-        {"beat": 4, "key": "j"},
-        {"beat": 6, "key": "k"},
-        {"beat": 8, "key": "j"},
+        {"beat": 4, "key": "hj"},
+        {"beat": 6, "key": "jk"},
+        {"beat": 8, "key": "kl"},
         {"beat": 10, "key": "k"},
         {"beat": 12, "key": "l"},
         {"beat": 14, "key": "h"},
